@@ -9,6 +9,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -47,7 +48,12 @@ func (q *Queries) DeleteFunctionsByIDs(ctx context.Context, ids []uuid.UUID) err
 		for _, v := range ids {
 			queryParams = append(queryParams, v)
 		}
-		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(ids))[1:], 1)
+		// Generate PostgreSQL-style placeholders: $1,$2,$3...
+		var placeholders []string
+		for i := range ids {
+			placeholders = append(placeholders, fmt.Sprintf("$%d", i+1))
+		}
+		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Join(placeholders, ","), 1)
 	} else {
 		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
 	}
@@ -625,7 +631,12 @@ func (q *Queries) GetFunctionRunFinishesByRunIDs(ctx context.Context, runIds []u
 		for _, v := range runIds {
 			queryParams = append(queryParams, v)
 		}
-		query = strings.Replace(query, "/*SLICE:run_ids*/?", strings.Repeat(",?", len(runIds))[1:], 1)
+		// Generate PostgreSQL-style placeholders: $1,$2,$3...
+		var placeholders []string
+		for i := range runIds {
+			placeholders = append(placeholders, fmt.Sprintf("$%d", i+1))
+		}
+		query = strings.Replace(query, "/*SLICE:run_ids*/?", strings.Join(placeholders, ","), 1)
 	} else {
 		query = strings.Replace(query, "/*SLICE:run_ids*/?", "NULL", 1)
 	}
