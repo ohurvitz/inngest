@@ -37,7 +37,7 @@ func (q *Queries) DeleteFunctionsByAppID(ctx context.Context, appID uuid.UUID) e
 }
 
 const deleteFunctionsByIDs = `-- name: DeleteFunctionsByIDs :exec
-UPDATE functions SET archived_at = NOW() WHERE id IN ($1)
+UPDATE functions SET archived_at = NOW() WHERE id IN (/*SLICE:ids*/?)
 `
 
 func (q *Queries) DeleteFunctionsByIDs(ctx context.Context, ids []uuid.UUID) error {
@@ -581,7 +581,7 @@ func (q *Queries) GetFunctionBySlug(ctx context.Context, slug string) (*Function
 }
 
 const getFunctionRun = `-- name: GetFunctionRun :one
-SELECT function_runs.run_id, function_runs.run_started_at, function_runs.function_id, function_runs.function_version, function_runs.trigger_type, function_runs.event_id, function_runs.batch_id, function_runs.original_run_id, function_runs.cron, function_finishes.run_id, function_finishes.status, function_finishes.output, function_finishes.completed_step_count, function_finishes.created_at
+SELECT function_runs.run_id, function_runs.run_started_at, function_runs.function_id, function_runs.function_version, function_runs.trigger_type, function_runs.event_id, function_runs.batch_id, function_runs.original_run_id, function_runs.cron, COALESCE(function_finishes.run_id, function_runs.run_id), COALESCE(function_finishes.status, ''), COALESCE(function_finishes.output, ''), COALESCE(function_finishes.completed_step_count, 0), COALESCE(function_finishes.created_at, function_runs.run_started_at)
   FROM function_runs
   LEFT JOIN function_finishes ON function_finishes.run_id = function_runs.run_id
   WHERE function_runs.run_id = $1
@@ -615,7 +615,7 @@ func (q *Queries) GetFunctionRun(ctx context.Context, runID ulid.ULID) (*GetFunc
 }
 
 const getFunctionRunFinishesByRunIDs = `-- name: GetFunctionRunFinishesByRunIDs :many
-SELECT run_id, status, output, completed_step_count, created_at FROM function_finishes WHERE run_id IN ($1)
+SELECT run_id, status, output, completed_step_count, created_at FROM function_finishes WHERE run_id IN (/*SLICE:run_ids*/?)
 `
 
 func (q *Queries) GetFunctionRunFinishesByRunIDs(ctx context.Context, runIds []ulid.ULID) ([]*FunctionFinish, error) {
@@ -710,7 +710,7 @@ func (q *Queries) GetFunctionRunHistory(ctx context.Context, runID ulid.ULID) ([
 }
 
 const getFunctionRuns = `-- name: GetFunctionRuns :many
-SELECT function_runs.run_id, function_runs.run_started_at, function_runs.function_id, function_runs.function_version, function_runs.trigger_type, function_runs.event_id, function_runs.batch_id, function_runs.original_run_id, function_runs.cron, function_finishes.run_id, function_finishes.status, function_finishes.output, function_finishes.completed_step_count, function_finishes.created_at FROM function_runs
+SELECT function_runs.run_id, function_runs.run_started_at, function_runs.function_id, function_runs.function_version, function_runs.trigger_type, function_runs.event_id, function_runs.batch_id, function_runs.original_run_id, function_runs.cron, COALESCE(function_finishes.run_id, function_runs.run_id), COALESCE(function_finishes.status, ''), COALESCE(function_finishes.output, ''), COALESCE(function_finishes.completed_step_count, 0), COALESCE(function_finishes.created_at, function_runs.run_started_at) FROM function_runs
 LEFT JOIN function_finishes ON function_finishes.run_id = function_runs.run_id
 `
 
@@ -814,7 +814,7 @@ func (q *Queries) GetFunctionRunsFromEvents(ctx context.Context, eventIds [][]by
 }
 
 const getFunctionRunsTimebound = `-- name: GetFunctionRunsTimebound :many
-SELECT function_runs.run_id, function_runs.run_started_at, function_runs.function_id, function_runs.function_version, function_runs.trigger_type, function_runs.event_id, function_runs.batch_id, function_runs.original_run_id, function_runs.cron, function_finishes.run_id, function_finishes.status, function_finishes.output, function_finishes.completed_step_count, function_finishes.created_at FROM function_runs
+SELECT function_runs.run_id, function_runs.run_started_at, function_runs.function_id, function_runs.function_version, function_runs.trigger_type, function_runs.event_id, function_runs.batch_id, function_runs.original_run_id, function_runs.cron, COALESCE(function_finishes.run_id, function_runs.run_id), COALESCE(function_finishes.status, ''), COALESCE(function_finishes.output, ''), COALESCE(function_finishes.completed_step_count, 0), COALESCE(function_finishes.created_at, function_runs.run_started_at) FROM function_runs
 LEFT JOIN function_finishes ON function_finishes.run_id = function_runs.run_id
 WHERE function_runs.run_started_at > $1 AND function_runs.run_started_at <= $2
 ORDER BY function_runs.run_started_at DESC
@@ -1073,7 +1073,7 @@ SELECT
     'links', links,
     'output_span_id', CASE WHEN output IS NOT NULL THEN span_id ELSE NULL END,
     'input_span_id', CASE WHEN input IS NOT NULL THEN span_id ELSE NULL END
-  )) AS span_fragments
+  ) ORDER BY start_time) AS span_fragments
 FROM spans
 WHERE debug_run_id = CAST($1 AS CHAR(26))
 GROUP BY trace_id, run_id, debug_session_id, parent_span_id
@@ -1139,7 +1139,7 @@ SELECT
     'links', links,
     'output_span_id', CASE WHEN output IS NOT NULL THEN span_id ELSE NULL END,
     'input_span_id', CASE WHEN input IS NOT NULL THEN span_id ELSE NULL END
-  )) AS span_fragments
+  ) ORDER BY start_time) AS span_fragments
 FROM spans
 WHERE debug_session_id = CAST($1 AS CHAR(26))
 GROUP BY trace_id, run_id, debug_run_id, dynamic_span_id, parent_span_id
@@ -1204,7 +1204,7 @@ SELECT
     'links', links,
     'output_span_id', CASE WHEN output IS NOT NULL THEN span_id ELSE NULL END,
     'input_span_id', CASE WHEN input IS NOT NULL THEN span_id ELSE NULL END
-  )) AS span_fragments
+  ) ORDER BY start_time) AS span_fragments
 FROM spans
 WHERE run_id = CAST($1 AS CHAR(26))
 GROUP BY run_id, trace_id, dynamic_span_id, parent_span_id
